@@ -25,7 +25,7 @@ type Server struct { //IRC Server
 var ( // Events can be changed to custom functions
 	EventOnJoin    func(string, string)         // channel, user
 	EventOnPart    func(string, string, string) // channel, user, message
-	EventOnPrivmsg func(string, string, string) // hannel, user, message
+	EventOnPrivmsg func(string, string, string) // channel, user, message
 	EventOnNotice  func(string, string, string) // channel, user, message
 	EventOnReply   func(string, string, string) // number, name, reply
 )
