@@ -34,8 +34,8 @@ var ( // Events can be changed to custom functions
 // Create sets the server address and user information.
 //	// Example: (Nickname!Username@Hostname): Real Name
 // 	freenode := ircudf.Create("irc.freenode.org:6667", "Nickname", "Username, "Real Name")
-func Create(addr, nickname, username, realname string) Server {
-	ref := Server{server: addr, sendqueue: make(chan string),
+func Create(addr, nickname, username, realname string) *Server {
+	ref := &Server{server: addr, sendqueue: make(chan string),
 		nickname: nickname, username: username, realname: realname}
 	
 	debug("Create:", ref.server, addr, "\n")
@@ -62,13 +62,13 @@ func (sock *Server) Receive() {
 
 	go func() {
 		debug("Receive:", sock.server, "\n")
-		sock.sendroutine() //Non-Blocking
 		reader := bufio.NewReader(sock.conn)
+		sock.sendroutine() //Non-Blocking
 
 		for {
 			line, err := reader.ReadString('\n')
 			errcheck(err)
-			debug("<-", line)
+			debug("->", line)
 			sock.parse(strings.Trim(line, "\r\n")) //Remove \r\n for easier parsing
 		}
 
@@ -138,9 +138,8 @@ func (sock *Server) sendroutine() {
 	go func() {
 		for {
 			smsg := <-sock.sendqueue
-			//fmt.Fprint(sock.conn, smsg)
 			io.WriteString(sock.conn, smsg) 
-			debug("->", smsg)
+			debug("<-", smsg)
 		}
 	}()
 }
