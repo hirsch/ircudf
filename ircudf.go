@@ -31,8 +31,9 @@ var ( // Events can be changed to custom functions
 	EventOnReply   func(string, string, string) // number, name, reply
 )
 
-// Create sets the server address and user information. Example:
-// 	freenode := ircudf.Connect("irc.freenode.org:6667", "jmiller", "jmiller, "John Miller")
+// Create sets the server address and user information.
+//	// Example: (Nickname!Username@Hostname): Real Name
+// 	freenode := ircudf.Create("irc.freenode.org:6667", "Nickname", "Username, "Real Name")
 func Create(addr, nickname, username, realname string) Server {
 	ref := Server{server: addr, sendqueue: make(chan string),
 		nickname: nickname, username: username, realname: realname}
