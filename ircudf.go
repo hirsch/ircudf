@@ -109,7 +109,7 @@ func (sock *Server) user(username, hostname, servername, realname string) {
 }
 
 // Join joins the specified channel(s). Multiple channels need to be
-// seperated by a colon. */
+// seperated by a colon.
 func (sock *Server) Join(channel string) {
 	sock.Send("JOIN " + channel)
 }
@@ -132,8 +132,7 @@ func (sock *Server) Send(message string) {
 	}()
 }
 
-// sendroutine processes the sendqueue and sends the messages to the server.
-// sendrouting must be executed as goroutine!
+// sendroutine sends the messages of the queue to the server.
 func (sock *Server) sendroutine() {
 	go func() {
 		for {
