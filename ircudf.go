@@ -10,6 +10,7 @@ import (
 	"net"
 	"strings"
 	"time"
+	"io"
 )
 
 type Server struct { //IRC Server
@@ -30,12 +31,12 @@ var ( // Events can be changed to custom functions
 	EventOnReply   func(string, string, string) // number, name, reply
 )
 
-// Create sets the server address and port. Example:
-// freenode := ircudf.Connect("irc.freenode.org:6667")
+// Create sets the server address and user information. Example:
+// 	freenode := ircudf.Connect("irc.freenode.org:6667", "jmiller", "jmiller, "John Miller")
 func Create(addr, nickname, username, realname string) Server {
 	ref := Server{server: addr, sendqueue: make(chan string),
 		nickname: nickname, username: username, realname: realname}
-
+	
 	debug("Create:", ref.server, addr, "\n")
 	return ref
 }
@@ -50,6 +51,7 @@ func (sock *Server) Connect(timeout ...int) {
 
 	conn, err := net.DialTimeout("tcp", sock.server, wait)
 	sock.conn = conn
+	
 	errcheck(err) //ADD: RECONNECT
 	debug("Connect:", sock.server, "\n")
 }
@@ -59,8 +61,8 @@ func (sock *Server) Receive() {
 
 	go func() {
 		debug("Receive:", sock.server, "\n")
-		reader := bufio.NewReader(sock.conn)
 		sock.sendroutine() //Non-Blocking
+		reader := bufio.NewReader(sock.conn)
 
 		for {
 			line, err := reader.ReadString('\n')
@@ -122,7 +124,7 @@ func (sock *Server) Privmsg(user string, message string) {
 	sock.Send("PRIVMSG " + user + " :" + message)
 }
 
-// Send adds the message to the RAW Message queue (similar to a FIFO stack)
+// Send adds the message to the RAW Message queue
 func (sock *Server) Send(message string) {
 	go func() {
 		sock.sendqueue <- message + "\n"
@@ -135,7 +137,8 @@ func (sock *Server) sendroutine() {
 	go func() {
 		for {
 			smsg := <-sock.sendqueue
-			fmt.Fprint(sock.conn, smsg)
+			//fmt.Fprint(sock.conn, smsg)
+			io.WriteString(sock.conn, smsg) 
 			debug("->", smsg)
 		}
 	}()
