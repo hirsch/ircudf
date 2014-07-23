@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-type Server struct {
+type Server struct {		//IRC Server
 	server    string		//Server address
 	sendqueue chan string	//Message queue
 	conn      net.Conn		//Server connection
@@ -53,7 +53,7 @@ func (sock *Server) Receive() {
 	go func() {
 		debug("Receive:", sock.server, "\n")
 		reader := bufio.NewReader(sock.conn)
-		go sock.sendroutine()
+		sock.sendroutine() //Non-Blocking
 
 		for {
 			line, err := reader.ReadString('\n')
@@ -127,12 +127,39 @@ func (sock *Server) Send(message string) {
 // sendroutine processes the sendqueue and sends the messages to the server.
 // sendrouting must be executed as goroutine!
 func (sock *Server) sendroutine() {
-	for {
-		smsg := <-sock.sendqueue
-		fmt.Fprint(sock.conn, smsg)
-		debug("->", smsg)
-	}
+	go func(){
+		for {
+			smsg := <-sock.sendqueue
+			fmt.Fprint(sock.conn, smsg)
+			debug("->", smsg)
+		}
+	}()
 }
+
+//OVERWRITE EVENTS!
+
+func EventOnJoin(channel, user string) {
+	
+}
+
+func EventOnPart(channel, user, message string) {
+	
+}
+
+func EventOnPrivmsg(channel, user, message string) {
+	
+}
+
+func EventOnNotice(channel, user, message string) {
+	
+}
+
+func EventOnReply(number, name, reply string) {
+	
+}
+
+
+
 
 // DEBUG FUNCTIONS
 
