@@ -1,6 +1,6 @@
-// Package ircudf implements the Internet Realy Chat (IRC) protocol 
-// as defined in rfc1459 and provides basic IRC functions
-// Website: http://tools.ietf.org/html/rfc1459.html
+// Package ircudf implements parts of the Internet Realy Chat (IRC) protocol 
+// as defined in rfc1459 (http://tools.ietf.org/html/rfc1459.html)
+// and provides basic IRC functions 
 package ircudf
 
 import (
@@ -13,24 +13,22 @@ import (
 )
 
 type Server struct {
-	server    string
-	sendqueue chan string
-	conn      net.Conn
-	/* USER */
-	nickname  string
-	username string
-	realname string
-	/* CHANNEL */
+	server    string		//Server address
+	sendqueue chan string	//Message queue
+	conn      net.Conn		//Server connection
+
+	nickname  string		//User nickname
+	username string			//User username 
+	realname string			//User realname
 }
 
 
 // Create sets the server address and port. Example:
 // freenode := ircudf.Connect("irc.freenode.org:6667")
-func Create(addr string, nickname string) Server {
-	ref := Server{}
-	ref.server = addr
-	ref.sendqueue = make(chan string)
-	ref.nickname = nickname
+func Create(addr, nickname, username, realname string) Server {
+	ref := Server{server: addr, sendqueue: make(chan string),
+	nickname: nickname, username: username, realname: realname}
+	
 	debug("Create:", ref.server, addr, "\n")
 	return ref
 }
@@ -45,7 +43,7 @@ func (sock *Server) Connect(timeout ...int) {
 
 	conn, err := net.DialTimeout("tcp", sock.server, wait)
 	sock.conn = conn
-	errcheck(err)
+	errcheck(err)	//ADD: RECONNECT
 	debug("Connect:", sock.server, "\n")
 }
 
@@ -53,7 +51,6 @@ func (sock *Server) Connect(timeout ...int) {
 func (sock *Server) Receive() {
 
 	go func() {
-
 		debug("Receive:", sock.server, "\n")
 		reader := bufio.NewReader(sock.conn)
 		go sock.sendroutine()
@@ -68,8 +65,8 @@ func (sock *Server) Receive() {
 	}()
 
 	time.Sleep(time.Second)
-	sock.nick(sock.nickname)
-	sock.user(sock.realname, "0", "0", sock.realname)
+	sock.Nick(sock.nickname)
+	sock.user(sock.username, "0", "0" , sock.realname)
 }
 
 
@@ -82,46 +79,46 @@ func (sock *Server) parse(line string) {
 	case split[0] == "PING":
 		sock.pong(split[1]) //Ping e.g.: PING :B97B6379
 	case split[1] == "PRIVMSG" && split[3][1:] == "!ping":
-		sock.privmsg(split[2], "!pong")
+		sock.Privmsg(split[2], "!pong")
 	case split[1] == "376":
-		sock.join("#irccs") 
+		sock.Join("#irccs") 
 	}
 }
 
-// nick sets or changes the nickname. The IRC server might reply an errorcode,
+// Nick sets or changes the nickname. The IRC server might reply an errorcode,
 // if the requsted nickname is not valid or in use. 
-func (sock *Server) nick(nickname string) {
+func (sock *Server) Nick(nickname string) {
 	sock.nickname = nickname
-	sock.send("NICK " + nickname)
+	sock.Send("NICK " + nickname)
 }
 
 // user specifies the userdata at the beginning of a new connection. 
 // Servername and hostname are likely to be ignored by the IRC server.
 // Scheme: (Nickname!Username@Hostname): Real Name
 func (sock *Server) user(username, hostname, servername, realname string) {
-	sock.send("USER " + username + " " + hostname + " " + servername + " :" + realname)
+	sock.Send("USER " + username + " " + hostname + " " + servername + " :" + realname)
 }
 
-// join joins the specified channel(s). Multiple channels need to be
+// Join joins the specified channel(s). Multiple channels need to be
 // seperated by a colon. */
-func (sock *Server) join(channel string) {
-	sock.send("JOIN " + channel )
+func (sock *Server) Join(channel string) {
+	sock.Send("JOIN " + channel )
 }
 
 // pong answers a ping request with a previously received reply string.
 func (sock *Server) pong(reply string) {
-	sock.send("PONG " + reply)
+	sock.Send("PONG " + reply)
 }
 
-// privmsg sends a private message to a user or a channel.
+// Privmsg sends a private message to a user or a channel.
 // The parameter user can also contain multiple receivers seperated by a colon.
-func (sock *Server) privmsg(user string, message string, ) {
-	sock.send("PRIVMSG " + user + " :" + message)
+func (sock *Server) Privmsg(user string, message string, ) {
+	sock.Send("PRIVMSG " + user + " :" + message)
 }
 
  
-// send adds the message to the sendqueue (similar to a FIFO stack)
-func (sock *Server) send(message string) {
+// Send adds the message to the RAW Message queue (similar to a FIFO stack)
+func (sock *Server) Send(message string) {
 	go func() {
 		sock.sendqueue <- message + "\n"
 	}()
