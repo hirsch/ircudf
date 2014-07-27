@@ -86,13 +86,19 @@ func (sock *Server) parse(line string) {
 	switch true {
 	case split[0] == "PING":
 		sock.pong(split[1]) //Ping e.g.: PING :B97B6379
+	case split[1] == "JOIN":
+		eventOnJoin(sock, split[2][1:], getNick(split[0]))
+	case split[1] == "PART":
+		eventOnPart(sock, split[2], getNick(split[0]), split[3][1:])
 	case split[1] == "PRIVMSG":
 		nick := getNick(split[0])
 		channel := split[2]
 		if channel == sock.Nickname {
 			channel = nick
 		}
-		eventOnPrivmsg(sock, channel, nick, split[3][1:])
+		if nick != sock.Nickname {
+			eventOnPrivmsg(sock, channel, nick, split[3][1:])
+		}
 	case split[1] == "376":
 		sock.Join("#irccs")
 	}
