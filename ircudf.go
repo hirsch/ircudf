@@ -14,35 +14,36 @@ import (
 )
 
 type Server struct { //IRC Server
-	server    string      //Server address
+	Server    string      //Server address
 	sendqueue chan string //Message queue
 	conn      net.Conn    //Server connection
 
-	nickname string //User nickname
+	Nickname string //User Nickname
 	username string //User username
 	realname string //User realname
 }
 
 var ( // Events can be changed to custom functions
-	EventOnJoin    func(string, string)         // channel, user
-	EventOnPart    func(string, string, string) // channel, user, message
-	EventOnPrivmsg func(string, string, string) // channel, user, message
-	EventOnNotice  func(string, string, string) // channel, user, message
-	EventOnReply   func(string, string, string) // number, name, reply
+	EventOnJoin = func(*Server, string, string){}     // server, channel, user
+	EventOnPart = func(*Server, string, string, string){} // server, channel, user, message
+	EventOnQuit = func(*Server, string, string, string){} // server, channel, user, message
+	EventOnPrivmsg = func(*Server, string, string, string){} // server, channel, user, message
+	EventOnNotice = func(*Server, string, string, string){} // server, channel, user, message
+	EventOnReply = func(*Server, string, string, string){} // server, number, name, reply
 )
 
-// Create sets the server address and user information.
+// Create sets the Server address and user information.
 //	// Example: (Nickname!Username@Hostname): Real Name
 // 	freenode := ircudf.Create("irc.freenode.org:6667", "Nickname", "Username, "Real Name")
-func Create(addr, nickname, username, realname string) *Server {
-	ref := &Server{server: addr, sendqueue: make(chan string),
-		nickname: nickname, username: username, realname: realname}
+func Create(addr, Nickname, username, realname string) *Server {
+	ref := &Server{Server: addr, sendqueue: make(chan string),
+		Nickname: Nickname, username: username, realname: realname}
 	
-	debug("Create:", ref.server, addr, "\n")
+	debug("Create:", ref.Server, addr, "\n")
 	return ref
 }
 
-// Connect establishes a connection to the server.
+// Connect establishes a connection to the Server.
 // If no parameter is given the default timeout (5 sec) will be used.
 func (sock *Server) Connect(timeout ...int) {
 	wait := 5 * time.Second
@@ -50,18 +51,18 @@ func (sock *Server) Connect(timeout ...int) {
 		wait = time.Duration(timeout[0]) * time.Second
 	}
 
-	conn, err := net.DialTimeout("tcp", sock.server, wait)
+	conn, err := net.DialTimeout("tcp", sock.Server, wait)
 	sock.conn = conn
 	
 	errcheck(err) //ADD: RECONNECT
-	debug("Connect:", sock.server, "\n")
+	debug("Connect:", sock.Server, "\n")
 }
 
-// Receive receives new messages from the server and forwards them to parse().
+// Receive receives new messages from the Server and forwards them to parse().
 func (sock *Server) Receive() {
 
 	go func() {
-		debug("Receive:", sock.server, "\n")
+		debug("Receive:", sock.Server, "\n")
 		reader := bufio.NewReader(sock.conn)
 		sock.sendroutine() //Non-Blocking
 
@@ -75,11 +76,11 @@ func (sock *Server) Receive() {
 	}()
 
 	time.Sleep(time.Second)
-	sock.Nick(sock.nickname)
+	sock.Nick(sock.Nickname)
 	sock.user(sock.username, "0", "0", sock.realname)
 }
 
-// parse parses incoming messages from the server and triggers predefined events.
+// parse parses incoming messages from the Server and triggers predefined events.
 func (sock *Server) parse(line string) {
 	split := strings.SplitN(line, " ", 4)
 	split = append(split, make([]string, 4-len(split), 4-len(split))...)
@@ -87,25 +88,30 @@ func (sock *Server) parse(line string) {
 	switch true {
 	case split[0] == "PING":
 		sock.pong(split[1]) //Ping e.g.: PING :B97B6379
-	case split[1] == "PRIVMSG" && split[3][1:] == "!ping":
-		sock.Privmsg(split[2], "!pong")
+	case split[1] == "PRIVMSG":
+		nick := getNick(split[0])
+		channel := split[2]
+		if channel == sock.Nickname {
+			channel = nick
+		}
+		EventOnPrivmsg(sock, channel, nick, split[3][1:])
 	case split[1] == "376":
 		sock.Join("#irccs")
 	}
 }
 
-// Nick sets or changes the nickname. The IRC server might reply an errorcode,
-// if the requsted nickname is not valid or in use.
-func (sock *Server) Nick(nickname string) {
-	sock.nickname = nickname
-	sock.Send("NICK " + nickname)
+// Nick sets or changes the Nickname. The IRC Server might reply an errorcode,
+// if the requsted Nickname is not valid or in use.
+func (sock *Server) Nick(Nickname string) {
+	sock.Nickname = Nickname
+	sock.Send("NICK " + Nickname)
 }
 
 // user specifies the userdata at the beginning of a new connection.
-// Servername and hostname are likely to be ignored by the IRC server.
+// Servername and hostname are likely to be ignored by the IRC Server.
 // Scheme: (Nickname!Username@Hostname): Real Name
-func (sock *Server) user(username, hostname, servername, realname string) {
-	sock.Send("USER " + username + " " + hostname + " " + servername + " :" + realname)
+func (sock *Server) user(username, hostname, Servername, realname string) {
+	sock.Send("USER " + username + " " + hostname + " " + Servername + " :" + realname)
 }
 
 // Join joins the specified channel(s). Multiple channels need to be
@@ -132,7 +138,7 @@ func (sock *Server) Send(message string) {
 	}()
 }
 
-// sendroutine sends the messages of the queue to the server.
+// sendroutine sends the messages of the queue to the Server.
 func (sock *Server) sendroutine() {
 	go func() {
 		for {
@@ -141,6 +147,10 @@ func (sock *Server) sendroutine() {
 			debug("<-", smsg)
 		}
 	}()
+}
+
+func getNick(hostmask string) string {
+	return strings.Split(hostmask, "!")[0][1:]
 }
 
 // DEBUG FUNCTIONS
