@@ -6,11 +6,11 @@ package ircudf
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"strings"
 	"time"
-	"io"
 )
 
 type Server struct { //IRC Server
@@ -24,12 +24,12 @@ type Server struct { //IRC Server
 }
 
 var ( // Events can be changed to custom functions
-	EventOnJoin = func(*Server, string, string){}     // server, channel, user
-	EventOnPart = func(*Server, string, string, string){} // server, channel, user, message
-	EventOnQuit = func(*Server, string, string, string){} // server, channel, user, message
-	EventOnPrivmsg = func(*Server, string, string, string){} // server, channel, user, message
-	EventOnNotice = func(*Server, string, string, string){} // server, channel, user, message
-	EventOnReply = func(*Server, string, string, string){} // server, number, name, reply
+	eventOnJoin    = func(*Server, string, string) {}         // server, channel, user
+	eventOnPart    = func(*Server, string, string, string) {} // server, channel, user, message
+	eventOnQuit    = func(*Server, string, string, string) {} // server, channel, user, message
+	eventOnPrivmsg = func(*Server, string, string, string) {} // server, channel, user, message
+	eventOnNotice  = func(*Server, string, string, string) {} // server, channel, user, message
+	eventOnReply   = func(*Server, string, string, string) {} // server, number, name, reply
 )
 
 // Create sets the Server address and user information.
@@ -38,7 +38,7 @@ var ( // Events can be changed to custom functions
 func Create(addr, Nickname, username, realname string) *Server {
 	ref := &Server{Server: addr, sendqueue: make(chan string),
 		Nickname: Nickname, username: username, realname: realname}
-	
+
 	debug("Create:", ref.Server, addr, "\n")
 	return ref
 }
@@ -53,31 +53,29 @@ func (sock *Server) Connect(timeout ...int) {
 
 	conn, err := net.DialTimeout("tcp", sock.Server, wait)
 	sock.conn = conn
-	
+
 	errcheck(err) //ADD: RECONNECT
 	debug("Connect:", sock.Server, "\n")
 }
 
 // Receive receives new messages from the Server and forwards them to parse().
 func (sock *Server) Receive() {
-
 	go func() {
-		debug("Receive:", sock.Server, "\n")
-		reader := bufio.NewReader(sock.conn)
-		sock.sendroutine() //Non-Blocking
-
-		for {
-			line, err := reader.ReadString('\n')
-			errcheck(err)
-			debug("->", line)
-			sock.parse(strings.Trim(line, "\r\n")) //Remove \r\n for easier parsing
-		}
-
+		time.Sleep(time.Second)
+		sock.Nick(sock.Nickname)
+		sock.user(sock.username, "0", "0", sock.realname)
 	}()
 
-	time.Sleep(time.Second)
-	sock.Nick(sock.Nickname)
-	sock.user(sock.username, "0", "0", sock.realname)
+	debug("Receive:", sock.Server, "\n")
+	reader := bufio.NewReader(sock.conn)
+	sock.sendroutine() //Non-Blocking
+
+	for {
+		line, err := reader.ReadString('\n')
+		errcheck(err)
+		debug("->", line)
+		sock.parse(strings.Trim(line, "\r\n")) //Remove \r\n for easier parsing
+	}
 }
 
 // parse parses incoming messages from the Server and triggers predefined events.
@@ -94,7 +92,7 @@ func (sock *Server) parse(line string) {
 		if channel == sock.Nickname {
 			channel = nick
 		}
-		EventOnPrivmsg(sock, channel, nick, split[3][1:])
+		eventOnPrivmsg(sock, channel, nick, split[3][1:])
 	case split[1] == "376":
 		sock.Join("#irccs")
 	}
@@ -143,14 +141,54 @@ func (sock *Server) sendroutine() {
 	go func() {
 		for {
 			smsg := <-sock.sendqueue
-			io.WriteString(sock.conn, smsg) 
+			io.WriteString(sock.conn, smsg)
 			debug("<-", smsg)
 		}
 	}()
 }
 
+// getNick extracts the nickame out of an hostmask. This function is
+// being used for parsing incoming messages.
 func getNick(hostmask string) string {
 	return strings.Split(hostmask, "!")[0][1:]
+}
+
+//HANDLE FUNCTIONS
+
+// HandleJoin registers the handle function for join.
+// Handle function parameters: server, channel, user
+func HandleJoin(h func(*Server, string, string)) {
+	eventOnJoin = h
+}
+
+// HandlePart registers the handle function for part.
+// Handle function parameters: server, channel, user, message
+func HandlePart(h func(*Server, string, string, string)) {
+	eventOnPart = h
+}
+
+// HandleQuit registers the handle function for quit.
+// Handle function parameters: server, channel, user, message
+func HandleQuit(h func(*Server, string, string, string)) {
+	eventOnQuit = h
+}
+
+// HandlePrivmsg registers the handle function for privmsg.
+// Handle function parameters: server, channel, user, message
+func HandlePrivmsg(h func(*Server, string, string, string)) {
+	eventOnPrivmsg = h
+}
+
+// HandleNotice registers the handle function for notice.
+// Handle function parameters: server, channel, user, message
+func HandleNotice(h func(*Server, string, string, string)) {
+	eventOnNotice = h
+}
+
+// HandleReply registers the handle function for reply.
+// Handle function parameters: server, number, name, reply
+func HandleReply(h func(*Server, string, string, string)) {
+	eventOnReply = h
 }
 
 // DEBUG FUNCTIONS
