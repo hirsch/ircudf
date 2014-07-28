@@ -56,10 +56,11 @@ func (sock *Server) Connect(timeout ...int) {
 
 	errcheck(err) //ADD: RECONNECT
 	debug("Connect:", sock.Server, "\n")
+	sock.receive()
 }
 
 // Receive receives new messages from the Server and forwards them to parse().
-func (sock *Server) Receive() {
+func (sock *Server) receive() {
 	go func() {
 		time.Sleep(time.Second)
 		sock.Nick(sock.Nickname)
