@@ -9,14 +9,16 @@ import (
 	"io"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type Server struct { //IRC Server
-	Server    string      //Server address
-	sendqueue chan string //Message queue
-	conn      net.Conn    //Server connection
+	Server    string        //Server address
+	sendqueue chan string   //Message queue
+	conn      net.Conn      //Server connection
+	throttle  time.Duration //throttle for message queue
 
 	Nickname string //User Nickname
 	username string //User username
@@ -26,7 +28,7 @@ type Server struct { //IRC Server
 var ( // Events can be changed to custom functions
 	eventOnJoin    = func(*Server, string, string) {}         // server, channel, user
 	eventOnPart    = func(*Server, string, string, string) {} // server, channel, user, message
-	eventOnQuit    = func(*Server, string, string, string) {} // server, channel, user, message
+	eventOnQuit    = func(*Server, string, string) {}         // server, user, message
 	eventOnPrivmsg = func(*Server, string, string, string) {} // server, channel, user, message
 	eventOnNotice  = func(*Server, string, string, string) {} // server, channel, user, message
 	eventOnReply   = func(*Server, string, string, string) {} // server, number, name, reply
@@ -37,7 +39,8 @@ var ( // Events can be changed to custom functions
 // 	freenode := ircudf.Create("irc.freenode.org:6667", "Nickname", "Username, "Real Name")
 func Create(addr, Nickname, username, realname string) *Server {
 	ref := &Server{Server: addr, sendqueue: make(chan string),
-		Nickname: Nickname, username: username, realname: realname}
+		Nickname: Nickname, username: username, realname: realname,
+		throttle: 0}
 
 	debug("Create:", ref.Server, addr, "\n")
 	return ref
@@ -91,6 +94,11 @@ func (sock *Server) parse(line string) {
 		eventOnJoin(sock, split[2][1:], getNick(split[0]))
 	case split[1] == "PART":
 		eventOnPart(sock, split[2], getNick(split[0]), split[3][1:])
+	case split[1] == "QUIT":
+		if split[3] != "" {
+			split[2] += " " + split[3]
+		}
+		eventOnQuit(sock, getNick(split[0]), split[2][1:])
 	case split[1] == "PRIVMSG":
 		nick := getNick(split[0])
 		channel := split[2]
@@ -100,9 +108,14 @@ func (sock *Server) parse(line string) {
 		if nick != sock.Nickname {
 			eventOnPrivmsg(sock, channel, nick, split[3][1:])
 		}
-	case split[1] == "376":
-		sock.Join("#irccs")
+	case isNum(split[1]):
+		eventOnReply(sock, split[1], split[2], split[3])
 	}
+}
+
+// Throttle sets the delay between sending messages in milliseconds.
+func (sock *Server) Throttle(delay int) {
+	sock.throttle = time.Duration(delay) * time.Millisecond
 }
 
 // Nick sets or changes the Nickname. The IRC Server might reply an errorcode,
@@ -150,6 +163,7 @@ func (sock *Server) sendroutine() {
 			smsg := <-sock.sendqueue
 			io.WriteString(sock.conn, smsg)
 			debug("<-", smsg)
+			time.Sleep(sock.throttle)
 		}
 	}()
 }
@@ -158,6 +172,13 @@ func (sock *Server) sendroutine() {
 // being used for parsing incoming messages.
 func getNick(hostmask string) string {
 	return strings.Split(hostmask, "!")[0][1:]
+}
+
+// isNum checks wether a string could be represented as integer.
+// This function is being used for parsing incoming messages.
+func isNum(str string) bool {
+	_, err := strconv.Atoi(str)
+	return err == nil
 }
 
 //HANDLE FUNCTIONS
@@ -175,8 +196,8 @@ func HandlePart(h func(*Server, string, string, string)) {
 }
 
 // HandleQuit registers the handle function for quit.
-// Handle function parameters: server, channel, user, message
-func HandleQuit(h func(*Server, string, string, string)) {
+// Handle function parameters: server, user, message
+func HandleQuit(h func(*Server, string, string)) {
 	eventOnQuit = h
 }
 
