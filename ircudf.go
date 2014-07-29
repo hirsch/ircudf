@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-type Server struct { //IRC Server
+type Server struct { 		//IRC Server
 	Server    string        //Server address
 	sendqueue chan string   //Message queue
 	conn      net.Conn      //Server connection
@@ -105,9 +105,14 @@ func (sock *Server) parse(line string) {
 		if channel == sock.Nickname {
 			channel = nick
 		}
-		if nick != sock.Nickname {
-			eventOnPrivmsg(sock, channel, nick, split[3][1:])
+		eventOnPrivmsg(sock, channel, nick, split[3][1:])
+	case split[1] == "NOTICE":
+		nick := getNick(split[0])
+		channel := split[2]
+		if channel == sock.Nickname {
+			channel = nick
 		}
+		eventOnNotice(sock, channel, nick, split[3][1:])
 	case isNum(split[1]):
 		eventOnReply(sock, split[1], split[2], split[3])
 	}
@@ -147,6 +152,12 @@ func (sock *Server) pong(reply string) {
 // The parameter user can also contain multiple receivers seperated by a colon.
 func (sock *Server) Privmsg(user string, message string) {
 	sock.Send("PRIVMSG " + user + " :" + message)
+}
+
+// Notice sends a notice to a user or a channel.
+// The parameter user can also contain multiple receivers seperated by a colon.
+func (sock *Server) Notice(user string, message string) {
+	sock.Send("NOTICE " + user + " :" + message)
 }
 
 // Send adds the message to the RAW Message queue
