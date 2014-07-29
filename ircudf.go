@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-type Server struct { 		// IRC Server
+type Server struct { // IRC Server
 	Server    string        // Server address
 	sendqueue chan string   // Message queue
 	conn      net.Conn      // Server connection
@@ -22,11 +22,11 @@ type Server struct { 		// IRC Server
 	Nickname string // User Nickname
 	username string // User username
 	realname string // User realname
-	
+
 	kill chan bool // kills all routines when closed
 }
 
-var Debug = false	// Debug enables logging to stdout
+var Debug = false // Debug enables logging to stdout
 
 var ( // Events can be changed to custom functions
 	eventOnJoin    = func(*Server, string, string) {}         // server, channel, user
@@ -69,7 +69,7 @@ func (sock *Server) Connect(timeout ...int) error {
 	}
 	defer conn.Close()
 	sock.conn = conn
-	
+
 	debug("Connected: ", sock.Server, "\n")
 	err = sock.receive()
 	if err != nil {
@@ -205,7 +205,7 @@ func (sock *Server) Send(message string) {
 	}()
 }
 
-// SendWait adds the message to the RAW Message queue and waits until 
+// SendWait adds the message to the RAW Message queue and waits until
 // the message got sent.
 func (sock *Server) SendWait(message string) {
 	sock.sendqueue <- message + "\n"
@@ -284,7 +284,7 @@ func HandleReply(h func(*Server, string, string, string)) {
 // DEBUG FUNCTIONS
 
 func debug(s ...interface{}) {
-	if Debug { 
+	if Debug {
 		fmt.Print(s...)
 	}
 }
