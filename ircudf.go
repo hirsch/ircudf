@@ -22,6 +22,8 @@ type Server struct { 		// IRC Server
 	Nickname string // User Nickname
 	username string // User username
 	realname string // User realname
+	
+	kill chan bool // kills all routines when closed
 }
 
 var Debug = false	// Debug enables logging to stdout
@@ -41,10 +43,15 @@ var ( // Events can be changed to custom functions
 func Create(addr, Nickname, username, realname string) *Server {
 	ref := &Server{Server: addr, sendqueue: make(chan string),
 		Nickname: Nickname, username: username, realname: realname,
-		throttle: 0}
+		throttle: 0, kill: make(chan bool)}
 
-	debug("Create:", ref.Server, addr, "\n")
+	debug("Created: ", addr, "\n")
 	return ref
+}
+
+// close closes the server related routines.
+func (sock *Server) close() {
+	close(sock.kill)
 }
 
 // Connect establishes a connection to the Server.
@@ -56,14 +63,19 @@ func (sock *Server) Connect(timeout ...int) error {
 	}
 
 	conn, err := net.DialTimeout("tcp", sock.Server, wait)
-	sock.conn = conn
-	
 	if err != nil {
+		sock.close()
 		return err
 	}
+	defer conn.Close()
+	sock.conn = conn
 	
-	debug("Connect:", sock.Server, "\n")
-	return sock.receive()
+	debug("Connected: ", sock.Server, "\n")
+	err = sock.receive()
+	if err != nil {
+		sock.close()
+	}
+	return err
 }
 
 // Receive receives new messages from the Server and forwards them to parse().
@@ -74,17 +86,22 @@ func (sock *Server) receive() error {
 		sock.user(sock.username, "0", "0", sock.realname)
 	}()
 
-	debug("Receive:", sock.Server, "\n")
+	debug("Receiving: ", sock.Server, "\n")
 	reader := bufio.NewReader(sock.conn)
 	sock.sendroutine() //Non-Blocking
 
 	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			return err
+		select {
+		case <-sock.kill:
+			return nil
+		default:
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return err
+			}
+			debug("-> ", line)
+			sock.parse(strings.Trim(line, "\r\n")) //Remove \r\n for easier parsing
 		}
-		debug("->", line)
-		sock.parse(strings.Trim(line, "\r\n")) //Remove \r\n for easier parsing
 	}
 }
 
@@ -149,6 +166,18 @@ func (sock *Server) Join(channel string) {
 	sock.Send("JOIN " + channel)
 }
 
+// Part leaves the specified channel(s). Multiple channels need to be
+// seperated by a colon.
+func (sock *Server) Part(channel string) {
+	sock.Send("PART " + channel)
+}
+
+// Quit closes the connection to the server with a quit message.
+func (sock *Server) Quit(message string) {
+	sock.SendWait("QUIT " + message)
+	sock.close()
+}
+
 // pong answers a ping request with a previously received reply string.
 func (sock *Server) pong(reply string) {
 	sock.Send("PONG " + reply)
@@ -169,18 +198,34 @@ func (sock *Server) Notice(user string, message string) {
 // Send adds the message to the RAW Message queue
 func (sock *Server) Send(message string) {
 	go func() {
-		sock.sendqueue <- message + "\n"
+		select {
+		case <-sock.kill:
+		case sock.sendqueue <- message + "\n":
+		}
 	}()
+}
+
+// SendWait adds the message to the RAW Message queue and waits until 
+// the message got sent.
+func (sock *Server) SendWait(message string) {
+	sock.sendqueue <- message + "\n"
+	sock.sendqueue <- "" //ensures that the previous message got sent
 }
 
 // sendroutine sends the messages of the queue to the Server.
 func (sock *Server) sendroutine() {
 	go func() {
 		for {
-			smsg := <-sock.sendqueue
-			io.WriteString(sock.conn, smsg)
-			debug("<-", smsg)
-			time.Sleep(sock.throttle)
+			select {
+			case <-sock.kill:
+				return
+			case smsg := <-sock.sendqueue:
+				if smsg != "" {
+					io.WriteString(sock.conn, smsg)
+					debug("<- ", smsg)
+					time.Sleep(sock.throttle)
+				}
+			}
 		}
 	}()
 }
