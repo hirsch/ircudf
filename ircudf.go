@@ -7,23 +7,24 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"strconv"
 	"strings"
 	"time"
 )
 
-type Server struct { 		//IRC Server
-	Server    string        //Server address
-	sendqueue chan string   //Message queue
-	conn      net.Conn      //Server connection
-	throttle  time.Duration //throttle for message queue
+type Server struct { 		// IRC Server
+	Server    string        // Server address
+	sendqueue chan string   // Message queue
+	conn      net.Conn      // Server connection
+	throttle  time.Duration // Throttle for message queue
 
-	Nickname string //User Nickname
-	username string //User username
-	realname string //User realname
+	Nickname string // User Nickname
+	username string // User username
+	realname string // User realname
 }
+
+var Debug = false	// Debug enables logging to stdout
 
 var ( // Events can be changed to custom functions
 	eventOnJoin    = func(*Server, string, string) {}         // server, channel, user
@@ -48,7 +49,7 @@ func Create(addr, Nickname, username, realname string) *Server {
 
 // Connect establishes a connection to the Server.
 // If no parameter is given the default timeout (5 sec) will be used.
-func (sock *Server) Connect(timeout ...int) {
+func (sock *Server) Connect(timeout ...int) error {
 	wait := 5 * time.Second
 	if len(timeout) >= 1 {
 		wait = time.Duration(timeout[0]) * time.Second
@@ -56,14 +57,17 @@ func (sock *Server) Connect(timeout ...int) {
 
 	conn, err := net.DialTimeout("tcp", sock.Server, wait)
 	sock.conn = conn
-
-	errcheck(err) //ADD: RECONNECT
+	
+	if err != nil {
+		return err
+	}
+	
 	debug("Connect:", sock.Server, "\n")
-	sock.receive()
+	return sock.receive()
 }
 
 // Receive receives new messages from the Server and forwards them to parse().
-func (sock *Server) receive() {
+func (sock *Server) receive() error {
 	go func() {
 		time.Sleep(time.Second)
 		sock.Nick(sock.Nickname)
@@ -76,7 +80,9 @@ func (sock *Server) receive() {
 
 	for {
 		line, err := reader.ReadString('\n')
-		errcheck(err)
+		if err != nil {
+			return err
+		}
 		debug("->", line)
 		sock.parse(strings.Trim(line, "\r\n")) //Remove \r\n for easier parsing
 	}
@@ -232,12 +238,8 @@ func HandleReply(h func(*Server, string, string, string)) {
 
 // DEBUG FUNCTIONS
 
-func errcheck(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
 func debug(s ...interface{}) {
-	fmt.Print(s...) //log.Print adds timestamp
+	if Debug { 
+		fmt.Print(s...)
+	}
 }
