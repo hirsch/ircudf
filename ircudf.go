@@ -64,7 +64,6 @@ func (sock *Server) Connect(timeout ...int) error {
 
 	conn, err := net.DialTimeout("tcp", sock.Server, wait)
 	if err != nil {
-		sock.close()
 		return err
 	}
 	defer conn.Close()
