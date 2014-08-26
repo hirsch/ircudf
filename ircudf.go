@@ -19,7 +19,7 @@ type Server struct { // IRC Server
 	conn      net.Conn      // Server connection
 	throttle  time.Duration // Throttle for message queue
 
-	password string			//Server password. NOT NICKSERV PASSWORD!
+	password string //Server password. NOT NICKSERV PASSWORD!
 
 	Nickname string // User Nickname
 	username string // User username
@@ -120,17 +120,26 @@ func (sock *Server) parse(line string) {
 	case split[1] == "JOIN":
 		eventOnJoin(sock, split[2][1:], getNick(split[0]))
 	case split[1] == "PART":
+		if len(split[3]) == 0 {
+			split[3] = " "
+		}
 		eventOnPart(sock, split[2], getNick(split[0]), split[3][1:])
 	case split[1] == "QUIT":
 		if split[3] != "" {
 			split[2] += " " + split[3]
 		}
+		if len(split[2]) == 0 {
+			split[2] = " "
+		}	
 		eventOnQuit(sock, getNick(split[0]), split[2][1:])
 	case split[1] == "PRIVMSG":
 		nick := getNick(split[0])
 		channel := split[2]
 		if channel == sock.Nickname {
 			channel = nick
+		}
+		if len(split[3]) == 0 {
+			split[3] = " "
 		}
 		eventOnPrivmsg(sock, channel, nick, split[3][1:])
 	case split[1] == "NOTICE":
@@ -139,6 +148,9 @@ func (sock *Server) parse(line string) {
 		if channel == sock.Nickname {
 			channel = nick
 		}
+		if len(split[3]) == 0 {
+			split[3] = " "
+		}	
 		eventOnNotice(sock, channel, nick, split[3][1:])
 	case isNum(split[1]):
 		eventOnReply(sock, split[1], split[2], split[3])
