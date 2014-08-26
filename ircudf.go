@@ -19,6 +19,8 @@ type Server struct { // IRC Server
 	conn      net.Conn      // Server connection
 	throttle  time.Duration // Throttle for message queue
 
+	password string			//Server password. NOT NICKSERV PASSWORD!
+
 	Nickname string // User Nickname
 	username string // User username
 	realname string // User realname
@@ -38,11 +40,13 @@ var ( // Events can be changed to custom functions
 )
 
 // Create sets the Server address and user information.
+// Set server password to an empty string if no password is needed for the connection.
+// Note: Password is the server's password, not the NickServ one.
 //	// Example: (Nickname!Username@Hostname): Real Name
-// 	freenode := ircudf.Create("irc.freenode.org:6667", "Nickname", "Username, "Real Name")
-func Create(addr, Nickname, username, realname string) *Server {
+// 	freenode := ircudf.Create("irc.freenode.org:6667", "", "Nickname", "Username, "Real Name")
+func Create(addr, Nickname, username, realname, password string) *Server {
 	ref := &Server{Server: addr, sendqueue: make(chan string),
-		Nickname: Nickname, username: username, realname: realname,
+		password: password, Nickname: Nickname, username: username, realname: realname,
 		throttle: 0, kill: make(chan bool)}
 
 	debug("Created: ", addr, "\n")
@@ -81,6 +85,7 @@ func (sock *Server) Connect(timeout ...int) error {
 func (sock *Server) receive() error {
 	go func() {
 		time.Sleep(time.Second)
+		sock.pass(sock.password)
 		sock.Nick(sock.Nickname)
 		sock.user(sock.username, "0", "0", sock.realname)
 	}()
@@ -152,6 +157,14 @@ func (sock *Server) Nick(Nickname string) {
 	sock.Send("NICK " + Nickname)
 }
 
+// pass sends the server password. If password is an empty string
+// no passsword will be sent.
+func (sock *Server) pass(password string) {
+	if password != "" {
+		sock.Send("PASS " + password)
+	}
+}
+
 // user specifies the userdata at the beginning of a new connection.
 // Servername and hostname are likely to be ignored by the IRC Server.
 // Scheme: (Nickname!Username@Hostname): Real Name
@@ -173,7 +186,7 @@ func (sock *Server) Part(channel string) {
 
 // Quit closes the connection to the server with a quit message.
 func (sock *Server) Quit(message string) {
-	sock.SendWait("QUIT " + message)
+	sock.SendWait("QUIT :" + message)
 	sock.close()
 }
 
